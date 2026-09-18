@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#111318" />
+<title>RAID Mercy Tracker</title>
+<style>
+:root{--bg:#0b0d12;--panel:#151923;--panel2:#1b2130;--text:#f5f7fb;--muted:#aab2c3;--gold:#e8b84a;--line:#2b3344;--danger:#d75a5a;--good:#6fd19b}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#20283a 0,#0b0d12 40%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}.wrap{max-width:760px;margin:auto;padding:calc(18px + env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom))}h1{font-size:28px;margin:6px 0 4px} .sub{color:var(--muted);margin:0 0 18px}.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}.tab{border:1px solid var(--line);background:#111621;color:#dfe5ef;padding:10px 4px;border-radius:12px;font-weight:700}.tab.active{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset;color:#fff}.card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:18px;padding:16px;margin:12px 0;box-shadow:0 10px 30px #0005}.row{display:flex;justify-content:space-between;gap:12px;align-items:center}.rarity{font-size:19px;font-weight:800}.count{font-size:34px;font-weight:900;color:var(--gold)}.small{font-size:13px;color:var(--muted)}.bar{height:10px;background:#090b10;border-radius:99px;overflow:hidden;margin:12px 0 8px;border:1px solid #30384a}.fill{height:100%;background:linear-gradient(90deg,#80621f,#e8b84a);width:0}.chance{font-weight:800}.mercy{color:var(--good)}.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}button{font:inherit;cursor:pointer}.btn{border:0;border-radius:13px;padding:13px 10px;font-weight:800;background:#293247;color:#fff}.btn.primary{background:linear-gradient(180deg,#d8a93d,#9d6e14);color:#0c0d10}.btn.reset{background:#3a2024;color:#ffd9d9}.footer-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}.history{margin-top:20px}.history h2{font-size:18px}.log{color:var(--muted);font-size:14px;padding:10px 0;border-bottom:1px solid var(--line)}.empty{color:#747e91}.note{font-size:12px;color:#7f899c;margin-top:16px;line-height:1.45}.pill{font-size:12px;border:1px solid var(--line);padding:4px 8px;border-radius:99px;color:var(--muted)}
+</style>
+</head>
+<body><main class="wrap">
+<h1>RAID Mercy Tracker</h1><p class="sub">Manual shard tracker with persistent counters, mercy odds, history and undo.</p>
+<div class="tabs" id="tabs"></div><section id="cards"></section>
+<div class="footer-actions"><button class="btn" id="undo">↶ Undo</button><button class="btn reset" id="resetAll">Reset All</button></div>
+<section class="history"><div class="row"><h2>Recent activity</h2><span class="pill">saved on device</span></div><div id="history"></div></section>
+<p class="note">For multi-pulls, use +10 only when no tracked rarity was pulled. If an Epic/Legendary/Mythical appears inside a 10-pull, add pulls individually around the reset to keep the counter exact.</p>
+</main>
+<script>
+const defs={
+ Ancient:[{key:'epic',name:'Epic',base:8,start:20,inc:2},{key:'legendary',name:'Legendary',base:.5,start:200,inc:5}],
+ Void:[{key:'epic',name:'Epic',base:8,start:20,inc:2},{key:'legendary',name:'Legendary',base:.5,start:200,inc:5}],
+ Primal:[{key:'legendary',name:'Legendary',base:1,start:75,inc:1},{key:'mythical',name:'Mythical',base:.5,start:200,inc:10}],
+ Sacred:[{key:'legendary',name:'Legendary',base:6,start:12,inc:2}]
+};
+const initial={Ancient:{epic:0,legendary:0},Void:{epic:0,legendary:0},Primal:{legendary:0,mythical:0},Sacred:{legendary:0}};
+let state=JSON.parse(localStorage.getItem('raidMercyState')||'null')||structuredClone(initial);let history=JSON.parse(localStorage.getItem('raidMercyHistory')||'[]');let selected=localStorage.getItem('raidMercyTab')||'Ancient';
+function save(){localStorage.setItem('raidMercyState',JSON.stringify(state));localStorage.setItem('raidMercyHistory',JSON.stringify(history));localStorage.setItem('raidMercyTab',selected)}
+function chance(d,n){let steps=Math.max(0,n-d.start);return Math.min(100,d.base+steps*d.inc)}
+function snapshot(label){history.unshift({label,at:new Date().toLocaleString(),state:structuredClone(state)});if(history.length>30)history.pop()}
+function pull(n){snapshot(`${selected}: +${n} pull${n>1?'s':''}`);for(const d of defs[selected])state[selected][d.key]+=n;save();render()}
+function hit(key,name){snapshot(`${selected}: ${name} pulled`);state[selected][key]=0;save();render()}
+function undo(){if(!history.length)return;const h=history.shift();state=h.state;save();render()}
+function render(){
+ document.getElementById('tabs').innerHTML=Object.keys(defs).map(s=>`<button class="tab ${s===selected?'active':''}" onclick="selected='${s}';save();render()">${s}</button>`).join('');
+ document.getElementById('cards').innerHTML=defs[selected].map(d=>{const n=state[selected][d.key];const c=chance(d,n);const pct=Math.min(100,n/d.start*100);const remaining=Math.max(0,d.start-n);return `<article class="card"><div class="row"><div><div class="rarity">${d.name}</div><div class="small">pulls since last ${d.name.toLowerCase()}</div></div><div class="count">${n}</div></div><div class="bar"><div class="fill" style="width:${pct}%"></div></div><div class="row"><span class="chance">Current chance: ${c.toFixed(c%1?1:0)}%</span><span class="small ${n>d.start?'mercy':''}">${n>d.start?'Mercy active':remaining+' to mercy threshold'}</span></div><div class="actions"><button class="btn primary" onclick="pull(1)">+1 ${selected}</button><button class="btn" onclick="pull(10)">+10 ${selected}</button><button class="btn reset" style="grid-column:1/-1" onclick="hit('${d.key}','${d.name}')">I pulled a ${d.name}</button></div></article>`}).join('');
+ document.getElementById('history').innerHTML=history.length?history.slice(0,8).map(h=>`<div class="log"><strong>${h.label}</strong><br>${h.at}</div>`).join(''):'<div class="empty">No pulls recorded yet.</div>';
+}
+document.getElementById('undo').onclick=undo;document.getElementById('resetAll').onclick=()=>{if(confirm('Reset every mercy counter to 0?')){snapshot('Reset all counters');state=structuredClone(initial);save();render()}};render();
+</script></body></html>
